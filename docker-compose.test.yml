@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  neo4j-test:
+    image: neo4j:4.4
+    container_name: neo4j-test
+    ports:
+      - "7687:7687"      # Bolt
+      - "7474:7474"      # HTTP (browser)
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
