@@ -44,30 +44,13 @@ Supports user follow/unfollow graph, post creation & retrieval, and a home feed.
 
 ---
 
-## 📐 Data Model (Neo4j)
-
-```cypher
-// Ensure uniqueness (run once):
-CREATE CONSTRAINT unique_user_email IF NOT EXISTS FOR (u:User) REQUIRE u.email IS UNIQUE;
-CREATE CONSTRAINT unique_user_username IF NOT EXISTS FOR (u:User) REQUIRE u.username IS UNIQUE;
-
-// Users
-// :User nodes with properties id, username, email, password (hashed), createdAt
-
-// Follows relationship
-// (a:User)-[:FOLLOWS]->(b:User)
-
-// Posts
-// :Post nodes with id, content, mediaUrl, createdAt
-// (u:User)-[:POSTED]->(p:Post)
-
 
 ## Getting Started
 
 1. Clone & Install
 
 git clone <your-repo-url>
-cd social-backend-neo4j
+cd <your-project-folder>
 npm ci
 
 2. Environment Variables
@@ -75,110 +58,121 @@ Copy the example and fill in your values:
 
 cp .env.example .env
 
-.env (for development / production / Docker)
+### .env (for development/ Docker - this env file should be used only when running on local Docker. For production, the apis are already deployed on render.)
 
 PORT=4000
 JWT_SECRET=your_jwt_secret
-
-# When running with Docker Compose (app ↔ neo4j container)
 NEO4J_URI=bolt://neo4j:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=neo4j_password
 
-.env.test (for host-machine tests)
 
 
+### .env.test (this is for running test cases, so use this env file while doing npm test, this is also for localhost)
 PORT=4000
 JWT_SECRET=your_jwt_secret
-
-# Tests connect to local Bolt port
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=neo4j_password
 NODE_ENV=test
 
-Running on Docker
+
+
+### Running on Docker
 docker-compose up --build
+Make sure to have your Docker Desktop open
 
-# API Endpoints
 
-Base URL: http://localhost:4000/api
+
+
+## API Endpoints
+
+Base URL: https://social-media-style-backend.onrender.com
 
 Auth
 Method	Path	Body	Response
-POST	/auth/register	{ username, email, password }	{ data: { id, token } }
-POST	/auth/login	{ email, password }	{ data: { id, token } }
+POST	/api/auth/register	{ username, email, password }	{ data: { id, token } }
+POST	/api/auth/login	{ email, password }	{ data: { id, token } }
 
 Users
 All require Authorization: Bearer <token>
 
 Method	Path	Response
-POST	/users/:id/follow	{ data: "ok" }
-DELETE	/users/:id/follow	{ data: "ok" }
-GET	/users/:id/followers	{ data: [ { id, username } ] }
-GET	/users/:id/following	{ data: [ { id, username } ] }
+POST	/api/users/:id/follow	{ data: "ok" }
+DELETE	/api/users/:id/follow	{ data: "ok" }
+GET	/api/users/:id/followers	{ data: [ { id, username } ] }
+GET	/api/users/:id/following	{ data: [ { id, username } ] }
 
 
 Posts & Feed
 Create & “me” routes require auth
 
 Method	Path	Body	Response
-POST	/posts	{ content, mediaUrl? }	{ data: { postId } }
-GET	/posts/me		{ data: [ Post ] }
-GET	/posts/user/:id		{ data: [ Post ] }
-GET	/posts/feed?limit=&skip=		{ data: [ Post ] }
+POST	/api/posts	{ content, mediaUrl? }	{ data: { postId } }
+GET	/api/posts/me		{ data: [ Post ] }
+GET	/api/posts/user/:id		{ data: [ Post ] }
+GET	/api/posts/feed?limit=&skip=		{ data: [ Post ] }
 
 
-# Feature Test cases
-Feature Test Cases
-Run these manually in Postman or via the automated suite:
+## Postman test settings
 
+POSTMAN TESTING (steps)
+
+1. Create Postman Environment “SocialAPI” with variables:
+baseUrl = https://social-media-style-backend.onrender.com
+userAId, userBId, tokenA, tokenB (empty)
+
+2. Register User A
+POST {{baseUrl}}/api/auth/register
+Body { "username":"vignesh","email":"vignesh@example.com","password":"P@ssw0rd" }
+Tests: save data.id → userAId, data.token → tokenA
+
+3. Register User B similarly → save userBId and tokenB
+
+4. Vignesh follows User B
+POST {{baseUrl}}/api/users/{{userBId}}/follow
+Header Authorization: Bearer {{tokenA}}
+
+5. Verify User Bs followers
+GET {{baseUrl}}/api/users/{{userBId}}/followers
+Assert userAId in response
+
+6. Vignesh unfollows user B
+DELETE {{baseUrl}}/api/users/{{userBId}}/follow
+
+7. Vignesh creates a post
+POST {{baseUrl}}/api/posts
+Header Authorization: Bearer {{tokenA}}
+Body { "content":"Hello from Alice!","mediaUrl":null }
+
+8. Fetch Vignesh's posts
+GET {{baseUrl}}/api/posts/me
+Authorization: Bearer {{tokenA}}
+
+9. Fetch User B's posts
+GET {{baseUrl}}/api/posts/user/{{userBId}}
+
+10. Feed flow
+• User B creates posts (use {{tokenB}})
+• Vignesh follows User B again
+• Vignesh GET {{baseUrl}}/api/posts/feed?limit=10&skip=0
+• Assert User B's posts appear
+
+11. Error cases
+• Missing token → 401
+• Invalid follow ID → 4xx
+• Create post without content → 400
+
+
+## Feature Test cases
 Auth
-
-Register new user → 201 + token
-
-Duplicate email/username → 409 Conflict
-
-Login valid → 200 + token
-
-Login invalid → 401 Unauthorized
-
+• Register success (201)
+• Duplicate registration (409)
+• Login success (200)
+• Login failure (401)
 User Graph
-
-Follow other user → 200
-
-Follow self → 400
-
-Unfollow not-following → 404 or 200 idempotent
-
-Followers/following lists reflect relationships
-
+• Follow/unfollow, self-follow, idempotent unfollow, list checks
 Posts
-
-Create with text only → 201
-
-Create with media → 201
-
-Missing content → 400
-
-Fetch own & others’ posts → arrays sorted by createdAt
-
+• Create post with/without media, missing content error, retrieval
 Feed
-
-Empty feed when no follows → []
-
-Feed shows only followees’ posts
-
-Pagination via limit & skip
-
-Protected: no token → 401
-
-Error Handling & Edge Cases
-
-Malformed JWT → 401
-
-Large content payload
-
-Script injection attempts stored as literal text
-
-Concurrency: multiple follow requests remain idempotent
+• Empty feed, correct posts after follow, pagination, auth required
